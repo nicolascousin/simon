@@ -85,6 +85,12 @@
       filter: brightness(1.3);
     }
 
+    /* Touch behavior fix for Android */
+    button[id^="pad-"] {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
     /* Subtle background grid */
     .bg-grid {
       background-size: 32px 32px;
@@ -1327,9 +1333,16 @@
          6. DOM EVENT LISTENERS
          ========================================================================== */
       bindEvents() {
-        // Pad clicks
+        // Pad clicks - touchend for Android (no 300ms delay), click as fallback
         Object.entries(this.dom.pads).forEach(([color, el]) => {
-          el.addEventListener('click', () => {
+          el.addEventListener('touchend', (e) => {
+            e.preventDefault(); // prevent ghost click
+            this.sound.initContext();
+            this.onPadClick(color);
+          }, { passive: false });
+          el.addEventListener('click', (e) => {
+            // Only fire on non-touch devices (touchend already handled it)
+            if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
             this.sound.initContext();
             this.onPadClick(color);
           });
