@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simon Multijoueur P2P - Relais & Élimination</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            simon: {
+              green: '#00e676',
+              greenGlow: '#69f0ae',
+              red: '#ff1744',
+              redGlow: '#ff5252',
+              yellow: '#ffea00',
+              yellowGlow: '#ffff00',
+              blue: '#2979ff',
+              blueGlow: '#448aff',
+              dark: '#12131c',
+              board: '#1e202e',
+              center: '#0d0e15'
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'bounce-short': 'bounce 0.6s ease-in-out infinite'
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .font-digital {
+      font-family: 'Orbitron', monospace;
+    }
+    /* Simon Pad Shapes */
+    .pad-green {
+      border-top-left-radius: 100%;
+    }
+    .pad-red {
+      border-top-right-radius: 100%;
+    }
+    .pad-yellow {
+      border-bottom-left-radius: 100%;
+    }
+    .pad-blue {
+      border-bottom-right-radius: 100%;
+    }
+
+    /* Glow Effects */
+    .glow-green.active {
+      background-color: #69f0ae !important;
+      box-shadow: 0 0 50px #00e676, inset 0 0 20px #ffffff;
+      transform: scale(0.985);
+      filter: brightness(1.3);
+    }
+    .glow-red.active {
+      background-color: #ff5252 !important;
+      box-shadow: 0 0 50px #ff1744, inset 0 0 20px #ffffff;
+      transform: scale(0.985);
+      filter: brightness(1.3);
+    }
+    .glow-yellow.active {
+      background-color: #ffff52 !important;
+      box-shadow: 0 0 50px #ffea00, inset 0 0 20px #ffffff;
+      transform: scale(0.985);
+      filter: brightness(1.3);
+    }
+    .glow-blue.active {
+      background-color: #82b1ff !important;
+      box-shadow: 0 0 50px #2979ff, inset 0 0 20px #ffffff;
+      transform: scale(0.985);
+      filter: brightness(1.3);
+    }
+
+    /* Subtle background grid */
+    .bg-grid {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+    /* Confetti animation */
+    @keyframes float {
+      0% { transform: translateY(0px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+    }
+    .confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      animation: float 3s linear forwards;
+    }
+  </style>
+</head>
+<body class="bg-simon-dark text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden bg-grid">
+
+  <!-- TOP BAR / HEADER -->
+  <header class="w-full max-w-7xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-30">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl p-[2.5px] shadow-lg shadow-indigo-500/20" style="background: conic-gradient(from 45deg, #ff1744 0deg 90deg, #2979ff 90deg 180deg, #ffea00 180deg 270deg, #00e676 270deg 360deg);">
+        <div class="w-full h-full bg-simon-dark rounded-[9px] flex items-center justify-center font-digital font-bold text-lg text-white">
+          S
+        </div>
+      </div>
+      <div>
+        <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
+          SIMON <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 uppercase tracking-widest font-digital">Relais P2P</span>
+        </h1>
+        <p class="text-xs text-slate-400 hidden sm:block">Jeu multijoueur serverless en direct</p>
+      </div>
+    </div>
+
+    <!-- ROOM INFO & ACTIONS -->
+    <div class="flex items-center space-x-2 sm:space-x-3">
+      <div id="connection-status-badge" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-xs text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+        <span id="connection-status-text">Connexion P2P...</span>
+      </div>
+
+      <button id="copy-room-btn" title="Copier le lien d'invitation" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+        <span class="hidden md:inline">Inviter</span>
+      </button>
+
+      <button id="open-profile-btn" class="flex items-center space-x-2 pl-2 pr-3 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition group">
+        <img id="header-avatar" src="" alt="Avatar" class="w-7 h-7 rounded-lg object-cover ring-2 ring-indigo-500/50">
+        <span id="header-pseudo" class="text-xs font-semibold text-slate-200 group-hover:text-white max-w-[90px] truncate">Moi</span>
+        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN GAME AREA -->
+  <main class="flex-1 w-full max-w-7xl mx-auto px-4 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+    
+    <!-- LEFT / MOBILE TOP: PLAYERS LIST -->
+    <section class="lg:col-span-4 xl:col-span-3 order-2 lg:order-1 flex flex-col space-y-3">
+      <div class="bg-slate-900/70 border border-slate-800/90 rounded-2xl p-4 backdrop-blur-md shadow-xl flex flex-col">
+        <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            Joueurs (<span id="players-count">1</span>)
+          </h2>
+          <span id="host-tag" class="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">👑 Hôte</span>
+        </div>
+
+        <!-- Players List Container -->
+        <div id="players-container" class="space-y-2 max-h-[260px] lg:max-h-[380px] overflow-y-auto pr-1">
+          <!-- Dynamically populated -->
+        </div>
+
+        <!-- Quick Chat / Reaction bar -->
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-1">
+          <span class="text-[11px] text-slate-500 font-semibold">Réactions :</span>
+          <div class="flex space-x-1">
+            <button class="reaction-btn hover:scale-125 transition text-base p-1" data-emoji="👏">👏</button>
+            <button class="reaction-btn hover:scale-125 transition text-base p-1" data-emoji="🔥">🔥</button>
+            <button class="reaction-btn hover:scale-125 transition text-base p-1" data-emoji="😱">😱</button>
+            <button class="reaction-btn hover:scale-125 transition text-base p-1" data-emoji="💀">💀</button>
+            <button class="reaction-btn hover:scale-125 transition text-base p-1" data-emoji="🎯">🎯</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GAME RULES HELPER -->
+      <div class="hidden sm:block bg-slate-900/40 border border-slate-800/60 rounded-xl p-3 text-xs text-slate-400 space-y-1.5">
+        <p class="font-bold text-slate-300">🎮 Règle du Relais :</p>
+        <p>1. À chaque manche, chaque note de la suite est rejouée par un joueur tiré au sort.</p>
+        <p>2. Le dernier joueur <span class="text-simon-yellowGlow font-semibold">ajoute une nouvelle note</span>.</p>
+        <p>3. Erreur ou temps écoulé = <span class="text-simon-redGlow font-semibold">Élimination</span> !</p>
+      </div>
+    </section>
+
+    <!-- CENTER: THE SIMON BOARD -->
+    <section class="lg:col-span-8 xl:col-span-9 order-1 lg:order-2 flex flex-col items-center justify-center relative">
+      
+      <!-- NOTIFICATION / STATUS BANNER -->
+      <div id="status-banner" class="mb-4 sm:mb-6 min-h-[48px] flex items-center justify-center px-4 py-2 rounded-2xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md shadow-lg text-center max-w-md w-full transition-all duration-300">
+        <p id="game-status-message" class="text-sm font-semibold text-slate-300 flex items-center justify-center gap-2">
+          En attente des joueurs... Cliquez sur <span class="text-emerald-400 font-bold">Prêt</span> pour démarrer.
+        </p>
+      </div>
+
+      <!-- SIMON BOARD CONTAINER -->
+      <div class="relative w-[320px] h-[320px] sm:w-[420px] sm:h-[420px] md:w-[480px] md:h-[480px] rounded-full bg-simon-board p-3 sm:p-4 shadow-[0_0_60px_rgba(0,0,0,0.8),inset_0_4px_10px_rgba(255,255,255,0.1)] flex items-center justify-center border-4 border-slate-800/80">
+        
+        <!-- 4 COLOR PADS GRID -->
+        <div class="w-full h-full grid grid-cols-2 gap-2 sm:gap-3 rounded-full overflow-hidden p-1">
+          
+          <!-- PAD GREEN (Top-Left) -->
+          <button id="pad-green" data-color="green" class="pad-green bg-[#009640] hover:bg-[#00c853] active:bg-[#69f0ae] glow-green transition duration-150 relative group cursor-pointer focus:outline-none disabled:cursor-not-allowed">
+            <span class="absolute top-6 left-6 text-white/30 font-digital text-sm sm:text-base font-bold group-hover:text-white/60">1</span>
+          </button>
+
+          <!-- PAD RED (Top-Right) -->
+          <button id="pad-red" data-color="red" class="pad-red bg-[#b71c1c] hover:bg-[#d50000] active:bg-[#ff5252] glow-red transition duration-150 relative group cursor-pointer focus:outline-none disabled:cursor-not-allowed">
+            <span class="absolute top-6 right-6 text-white/30 font-digital text-sm sm:text-base font-bold group-hover:text-white/60">2</span>
+          </button>
+
+          <!-- PAD YELLOW (Bottom-Left) -->
+          <button id="pad-yellow" data-color="yellow" class="pad-yellow bg-[#cca000] hover:bg-[#ffd600] active:bg-[#ffff52] glow-yellow transition duration-150 relative group cursor-pointer focus:outline-none disabled:cursor-not-allowed">
+            <span class="absolute bottom-6 left-6 text-white/30 font-digital text-sm sm:text-base font-bold group-hover:text-white/60">3</span>
+          </button>
+
+          <!-- PAD BLUE (Bottom-Right) -->
+          <button id="pad-blue" data-color="blue" class="pad-blue bg-[#0d47a1] hover:bg-[#2962ff] active:bg-[#82b1ff] glow-blue transition duration-150 relative group cursor-pointer focus:outline-none disabled:cursor-not-allowed">
+            <span class="absolute bottom-6 right-6 text-white/30 font-digital text-sm sm:text-base font-bold group-hover:text-white/60">4</span>
+          </button>
+        </div>
+
+        <!-- CENTER CONTROLLER CONSOLE -->
+        <div class="absolute w-[160px] h-[160px] sm:w-[200px] sm:h-[200px] md:w-[230px] md:h-[230px] rounded-full bg-simon-center border-4 sm:border-[6px] border-slate-900 shadow-[0_0_30px_rgba(0,0,0,0.9),inset_0_2px_8px_rgba(255,255,255,0.15)] flex flex-col items-center justify-between p-3 sm:p-4 text-center z-10">
+          
+          <!-- TOP: ROUND / LEVEL DISPLAY -->
+          <div class="flex items-center space-x-2">
+            <div class="flex flex-col items-center">
+              <span class="text-[9px] sm:text-[10px] tracking-widest uppercase font-bold text-slate-400">Manche</span>
+              <div class="bg-black/90 px-2.5 py-0.5 rounded border border-slate-800 text-simon-red font-digital font-bold text-sm sm:text-base tracking-wider" id="score-display">
+                --
+              </div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[9px] sm:text-[10px] tracking-widest uppercase font-bold text-slate-400">Vivant</span>
+              <div class="bg-black/90 px-2.5 py-0.5 rounded border border-slate-800 text-emerald-400 font-digital font-bold text-sm sm:text-base tracking-wider" id="alive-display">
+                0
+              </div>
+            </div>
+          </div>
+
+          <!-- CENTER: ACTIVE PLAYER AVATAR & PROMPT OR READY BUTTON -->
+          <div id="center-action-area" class="w-full flex flex-col items-center justify-center my-auto">
+            
+            <!-- READY BUTTON (Lobby Mode) -->
+            <button id="ready-toggle-btn" class="w-full py-2 px-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 text-white font-bold text-xs sm:text-sm tracking-wider uppercase shadow-lg shadow-emerald-500/30 transition transform">
+              Je suis prêt !
+            </button>
+
+            <!-- IN-GAME ACTIVE TURN DISPLAY -->
+            <div id="active-turn-widget" class="hidden flex-col items-center space-y-1">
+              <div class="relative">
+                <img id="turn-avatar" src="" class="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover ring-2 ring-amber-400 shadow-md">
+              </div>
+              <span id="turn-name" class="text-xs font-bold text-slate-200 max-w-[120px] truncate">Nom</span>
+              <span id="turn-instruction" class="text-[10px] text-amber-300 font-semibold uppercase tracking-wider">Votre tour</span>
+            </div>
+          </div>
+
+          <!-- BOTTOM: TIMER PROGRESS RING / BAR -->
+          <div class="w-[72%] max-w-[130px] sm:max-w-[160px] mx-auto pb-1">
+            <div class="w-full bg-slate-800/90 h-1.5 sm:h-2 rounded-full overflow-hidden shadow-inner border border-slate-700/50">
+              <div id="turn-timer-bar" class="bg-gradient-to-r from-amber-400 to-red-500 h-full w-0 transition-all duration-100 ease-linear"></div>
+            </div>
+            <div class="flex justify-between items-center text-[8px] sm:text-[9px] text-slate-400 mt-1 px-2 font-digital tracking-wider">
+              <span>TEMPS</span>
+              <span id="timer-text">5.0s</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- SOUND & CONTROLS FOOTER -->
+      <div class="mt-4 flex items-center space-x-4">
+        <button id="toggle-sound-btn" class="p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs flex items-center gap-1.5 transition">
+          <svg id="sound-icon-on" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+          <svg id="sound-icon-off" class="w-4 h-4 text-red-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+          <span>Son</span>
+        </button>
+
+        <span class="text-xs text-slate-500">Code salle : <span id="room-code-tag" class="font-digital text-slate-300 font-bold">global</span></span>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- PROFILE & WEBCAM MODAL -->
+  <div id="profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <span>⚙️</span> Mon Profil Joueur
+        </h3>
+        <button id="close-profile-btn" class="text-slate-400 hover:text-white text-xl p-1">&times;</button>
+      </div>
+
+      <!-- PSEUDO INPUT -->
+      <div class="space-y-1.5">
+        <label for="pseudo-input" class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pseudo</label>
+        <input type="text" id="pseudo-input" maxlength="15" class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold" placeholder="Votre pseudo...">
+      </div>
+
+      <!-- AVATAR SELECTION & WEBCAM -->
+      <div class="space-y-3">
+        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Photo d'Avatar</label>
+        
+        <div class="flex items-center space-x-4">
+          <img id="modal-avatar-preview" src="" class="w-20 h-20 rounded-2xl object-cover ring-2 ring-indigo-500/50 bg-slate-800 shadow-md">
+          
+          <div class="flex-1 space-y-2">
+            <button id="start-webcam-btn" class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+              Prendre une photo
+            </button>
+            <label class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer border border-slate-700">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              Téléverser une image
+              <input type="file" id="avatar-file-input" accept="image/*" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <!-- WEBCAM LIVE CAPTURE CONTAINER (HIDDEN INITIALLY) -->
+        <div id="webcam-container" class="hidden space-y-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+          <div class="relative w-full aspect-square max-w-[200px] mx-auto rounded-xl overflow-hidden bg-black flex items-center justify-center">
+            <video id="webcam-video" autoplay playsinline class="w-full h-full object-cover -scale-x-100"></video>
+          </div>
+          <div class="flex space-x-2">
+            <button id="snap-photo-btn" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition">
+              Capturer la photo
+            </button>
+            <button id="cancel-webcam-btn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-bold rounded-xl transition">
+              Annuler
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SAVE BUTTON -->
+      <button id="save-profile-btn" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-simon-blue hover:from-indigo-500 hover:to-simon-blueGlow text-white font-bold rounded-2xl shadow-lg shadow-indigo-600/30 transition transform active:scale-95 text-sm">
+        Enregistrer les modifications
+      </button>
+    </div>
+  </div>
+
+  <!-- FLOATING EMOJI ANIMATION CONTAINER -->
+  <div id="floating-emojis-container" class="fixed inset-0 pointer-events-none z-40 overflow-hidden"></div>
+
+  <!-- FOOTER -->
+  <footer class="w-full max-w-7xl mx-auto px-4 py-3 text-center text-xs text-slate-600">
+    Simon Multijoueur P2P &bull; 100% Serverless WebRTC &bull; Audio Web Synth &bull; Solo & Multi
+  </footer>
+
+  <!-- TRYSTERO WEBRTC P2P & APPLICATION LOGIC SCRIPT -->
+  <script type="module">
+    import { joinRoom, selfId } from 'https://esm.sh/trystero@0.25.3';
+
+    /* ==========================================================================
+       1. WEB AUDIO SYNTHESIZER ENGINE (ORIGINAL SIMON TONES + SOFT ERROR)
+       ========================================================================== */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.isMuted = false;
+        // Fréquences originales authentiques du jeu Simon
+        this.frequencies = {
+          green: 415.3,  // Sol#4 (Vert)
+          red: 310.0,    // Ré#4 (Rouge)
+          yellow: 252.0, // Si3 (Jaune)
+          blue: 209.3    // Sol#3 (Bleu)
+        };
+      }
+
+      initContext() {
+        if (!this.ctx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContextClass();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      // Son original Simon avec onde pure et enveloppe douce
+      playColorTone(color, duration = 300) {
+        if (this.isMuted) return;
+        this.initContext();
+        const freq = this.frequencies[color] || 440;
+        const now = this.ctx.currentTime;
+        const durSec = duration / 1000;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+
+        // Attaque et extinction douces pour éviter les clics
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + durSec);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + durSec + 0.05);
+      }
+
+      // Soft musical descending two-tone error ("Uh-oh" warm drop instead of harsh buzz)
+      playBuzzer() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+
+        const playTone = (freq, startTime, duration) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          const filter = this.ctx.createBiquadFilter();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, startTime);
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.9, startTime + duration);
+
+          filter.type = 'lowpass';
+          filter.frequency.value = 650;
+
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+          osc.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(startTime);
+          osc.stop(startTime + duration + 0.05);
+        };
+
+        // Note 1: Eb4 (311Hz) -> Note 2: Bb3 (233Hz) - Soft descending minor tone
+        playTone(311.13, now, 0.18);
+        playTone(233.08, now + 0.16, 0.28);
+      }
+
+      // Sparkling celebratory fanfare
+      playVictory() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const notes = [329.63, 440.00, 554.37, 659.25, 880.00]; // E4, A4, C#5, E5, A5
+        notes.forEach((freq, idx) => {
+          const t = now + idx * 0.11;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.001, t);
+          gain.gain.linearRampToValueAtTime(0.24, t + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.5);
+        });
+      }
+
+      // Delicate round completion chime
+      playRoundChime() {
+        if (this.isMuted) return;
+        this.initContext();
+        const now = this.ctx.currentTime;
+        const notes = [554.37, 880.00]; // C#5 -> A5
+        notes.forEach((freq, idx) => {
+          const t = now + idx * 0.09;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.001, t);
+          gain.gain.linearRampToValueAtTime(0.18, t + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.35);
+        });
+      }
+    }
+
+    /* ==========================================================================
+       2. AVATAR & LOCAL PROFILE MANAGER
+       ========================================================================== */
+    class ProfileManager {
+      constructor() {
+        this.storageKey = 'simon_player_profile_v1';
+        this.profile = this.loadProfile();
+        this.webcamStream = null;
+      }
+
+      generateDefaultAvatar(name) {
+        const colors = ['#00e676', '#ff1744', '#ffea00', '#2979ff', '#9c27b0', '#ff9800'];
+        const initial = (name || 'S').charAt(0).toUpperCase();
+        const bg = colors[Math.floor(Math.random() * colors.length)];
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+          <rect width="100" height="100" rx="28" fill="${bg}" />
+          <circle cx="50" cy="50" r="34" fill="rgba(0,0,0,0.25)" />
+          <text x="50" y="62" font-size="38" font-family="sans-serif" font-weight="bold" fill="#ffffff" text-anchor="middle">${initial}</text>
+        </svg>`;
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      }
+
+      loadProfile() {
+        try {
+          const raw = localStorage.getItem(this.storageKey);
+          if (raw) {
+            const data = JSON.parse(raw);
+            if (data.name && data.avatar) return data;
+          }
+        } catch (e) {
+          console.warn('Erreur de lecture localStorage:', e);
+        }
+
+        const randomNum = Math.floor(100 + Math.random() * 900);
+        const defaultName = `Joueur_${randomNum}`;
+        const defaultProfile = {
+          name: defaultName,
+          avatar: this.generateDefaultAvatar(defaultName)
+        };
+        this.saveProfile(defaultProfile.name, defaultProfile.avatar);
+        return defaultProfile;
+      }
+
+      saveProfile(name, avatar) {
+        this.profile = {
+          name: name.trim().slice(0, 15) || 'Anonyme',
+          avatar: avatar || this.generateDefaultAvatar(name)
+        };
+        try {
+          localStorage.setItem(this.storageKey, JSON.stringify(this.profile));
+        } catch (e) {
+          console.warn('Erreur de sauvegarde localStorage:', e);
+        }
+      }
+
+      async startWebcam(videoEl) {
+        try {
+          this.webcamStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 320 }, height: { ideal: 320 }, facingMode: 'user' },
+            audio: false
+          });
+          videoEl.srcObject = this.webcamStream;
+          return true;
+        } catch (err) {
+          alert('Impossible d\'accéder à la webcam: ' + err.message);
+          return false;
+        }
+      }
+
+      stopWebcam() {
+        if (this.webcamStream) {
+          this.webcamStream.getTracks().forEach(t => t.stop());
+          this.webcamStream = null;
+        }
+      }
+
+      captureWebcamFrame(videoEl) {
+        const canvas = document.createElement('canvas');
+        const size = 96;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        ctx.translate(size, 0);
+        ctx.scale(-1, 1);
+
+        const vW = videoEl.videoWidth || 320;
+        const vH = videoEl.videoHeight || 320;
+        const minDim = Math.min(vW, vH);
+        const sX = (vW - minDim) / 2;
+        const sY = (vH - minDim) / 2;
+
+        ctx.drawImage(videoEl, sX, sY, minDim, minDim, 0, 0, size, size);
+        return canvas.toDataURL('image/jpeg', 0.82);
+      }
+    }
+
+    /* ==========================================================================
+       3. MAIN SIMON P2P MULTIPLAYER APPLICATION
+       ========================================================================== */
+    class SimonApp {
+      constructor() {
+        this.sound = new SoundEngine();
+        this.profileMgr = new ProfileManager();
+
+        // P2P State
+        this.myId = selfId;
+        this.room = null;
+        this.roomName = this.getRoomNameFromURL();
+        this.peers = new Map();
+        this.isReady = false;
+        
+        // Game State
+        this.gameState = 'LOBBY';
+        this.sequence = [];
+        this.currentRound = 0;
+        this.currentStep = 0;
+        this.currentTurnPlayerId = null;
+        this.alivePlayers = [];
+        this.turnCycle = [];
+        this.turnTimer = null;
+        this.turnTimerEnd = 0;
+        this.turnDurationMs = 5000;
+
+        // Dom Elements
+        this.dom = {
+          pads: {
+            green: document.getElementById('pad-green'),
+            red: document.getElementById('pad-red'),
+            yellow: document.getElementById('pad-yellow'),
+            blue: document.getElementById('pad-blue')
+          },
+          statusMsg: document.getElementById('game-status-message'),
+          playersCount: document.getElementById('players-count'),
+          playersContainer: document.getElementById('players-container'),
+          hostTag: document.getElementById('host-tag'),
+          scoreDisplay: document.getElementById('score-display'),
+          aliveDisplay: document.getElementById('alive-display'),
+          readyBtn: document.getElementById('ready-toggle-btn'),
+          centerActionArea: document.getElementById('center-action-area'),
+          activeTurnWidget: document.getElementById('active-turn-widget'),
+          turnAvatar: document.getElementById('turn-avatar'),
+          turnName: document.getElementById('turn-name'),
+          turnInstruction: document.getElementById('turn-instruction'),
+          timerBar: document.getElementById('turn-timer-bar'),
+          timerText: document.getElementById('timer-text'),
+          connectionStatusText: document.getElementById('connection-status-text'),
+          connectionStatusBadge: document.getElementById('connection-status-badge'),
+          roomCodeTag: document.getElementById('room-code-tag'),
+          headerAvatar: document.getElementById('header-avatar'),
+          headerPseudo: document.getElementById('header-pseudo'),
+          profileModal: document.getElementById('profile-modal'),
+          pseudoInput: document.getElementById('pseudo-input'),
+          modalAvatarPreview: document.getElementById('modal-avatar-preview'),
+          webcamContainer: document.getElementById('webcam-container'),
+          webcamVideo: document.getElementById('webcam-video'),
+          startWebcamBtn: document.getElementById('start-webcam-btn'),
+          snapPhotoBtn: document.getElementById('snap-photo-btn'),
+          cancelWebcamBtn: document.getElementById('cancel-webcam-btn'),
+          avatarFileInput: document.getElementById('avatar-file-input'),
+          saveProfileBtn: document.getElementById('save-profile-btn'),
+          openProfileBtn: document.getElementById('open-profile-btn'),
+          closeProfileBtn: document.getElementById('close-profile-btn'),
+          copyRoomBtn: document.getElementById('copy-room-btn'),
+          toggleSoundBtn: document.getElementById('toggle-sound-btn'),
+          soundIconOn: document.getElementById('sound-icon-on'),
+          soundIconOff: document.getElementById('sound-icon-off'),
+          emojiContainer: document.getElementById('floating-emojis-container')
+        };
+
+        this.initUI();
+        this.initNetwork();
+        this.bindEvents();
+      }
+
+      getRoomNameFromURL() {
+        const hash = window.location.hash.replace('#', '').trim();
+        return hash || 'simon-global-lobby';
+      }
+
+      isHost() {
+        const allIds = [this.myId, ...Array.from(this.peers.keys())].sort();
+        return allIds[0] === this.myId;
+      }
+
+      getHostId() {
+        const allIds = [this.myId, ...Array.from(this.peers.keys())].sort();
+        return allIds[0];
+      }
+
+      /* ==========================================================================
+         UI INITIALIZATION & UPDATE
+         ========================================================================== */
+      initUI() {
+        this.updateHeaderProfile();
+        this.dom.roomCodeTag.textContent = this.roomName === 'simon-global-lobby' ? 'Salle Globale' : this.roomName;
+        this.setPadClickable(false);
+      }
+
+      updateHeaderProfile() {
+        this.dom.headerAvatar.src = this.profileMgr.profile.avatar;
+        this.dom.headerPseudo.textContent = this.profileMgr.profile.name;
+        this.dom.modalAvatarPreview.src = this.profileMgr.profile.avatar;
+        this.dom.pseudoInput.value = this.profileMgr.profile.name;
+      }
+
+      updatePlayersListUI() {
+        const allPlayers = [
+          { id: this.myId, ...this.profileMgr.profile, isReady: this.isReady, isMe: true },
+          ...Array.from(this.peers.entries()).map(([id, p]) => ({ id, ...p, isMe: false }))
+        ];
+
+        this.dom.playersCount.textContent = allPlayers.length;
+        this.dom.hostTag.style.display = this.isHost() ? 'inline-block' : 'none';
+
+        this.dom.playersContainer.innerHTML = '';
+        allPlayers.forEach(p => {
+          const isTurn = this.gameState === 'IN_ROUND' && this.currentTurnPlayerId === p.id;
+          const isAlive = this.alivePlayers.includes(p.id);
+          const isHost = p.id === this.getHostId();
+
+          const card = document.createElement('div');
+          card.className = `flex items-center justify-between p-2 rounded-xl transition duration-150 ${
+            isTurn 
+              ? 'bg-amber-500/20 border-2 border-amber-400/80 shadow-md shadow-amber-500/10' 
+              : p.isMe 
+                ? 'bg-slate-800/80 border border-slate-700/80' 
+                : 'bg-slate-900/40 border border-slate-800/60'
+          }`;
+
+          card.innerHTML = `
+            <div class="flex items-center space-x-2.5 overflow-hidden">
+              <div class="relative">
+                <img src="${p.avatar}" class="w-8 h-8 rounded-lg object-cover bg-slate-800 ring-1 ${isTurn ? 'ring-amber-400 ring-2 animate-pulse' : 'ring-slate-700'}">
+                ${isHost ? '<span class="absolute -top-1.5 -left-1.5 text-[10px]" title="Hôte de la partie">👑</span>' : ''}
+              </div>
+              <div class="flex flex-col min-w-0">
+                <span class="text-xs font-bold ${p.isMe ? 'text-indigo-300' : 'text-slate-200'} truncate">
+                  ${p.name} ${p.isMe ? '<span class="text-[10px] text-slate-400">(Moi)</span>' : ''}
+                </span>
+                <span class="text-[10px] ${
+                  this.gameState === 'LOBBY' 
+                    ? p.isReady ? 'text-emerald-400 font-semibold' : 'text-slate-500'
+                    : isAlive ? 'text-emerald-400 font-semibold' : 'text-red-400 line-through'
+                }">
+                  ${
+                    this.gameState === 'LOBBY'
+                      ? (p.isReady ? '✅ Prêt' : '⏳ En attente')
+                      : (isAlive ? (isTurn ? '🎯 En train de jouer' : '🟢 En jeu') : '💀 Éliminé')
+                  }
+                </span>
+              </div>
+            </div>
+            <div>
+              ${
+                this.gameState === 'LOBBY'
+                  ? `<span class="w-2.5 h-2.5 rounded-full inline-block ${p.isReady ? 'bg-emerald-400 ring-4 ring-emerald-400/20' : 'bg-slate-600'}"></span>`
+                  : `<span class="text-xs font-digital font-bold ${isAlive ? 'text-emerald-400' : 'text-red-400'}">${isAlive ? 'VIVANT' : 'KO'}</span>`
+              }
+            </div>
+          `;
+          this.dom.playersContainer.appendChild(card);
+        });
+
+        this.dom.aliveDisplay.textContent = this.gameState === 'LOBBY' ? allPlayers.length : this.alivePlayers.length;
+      }
+
+      setPadClickable(clickable) {
+        Object.values(this.dom.pads).forEach(pad => {
+          pad.disabled = !clickable;
+        });
+      }
+
+      flashPad(color, duration = 300, playSound = true) {
+        const pad = this.dom.pads[color];
+        if (!pad) return;
+
+        pad.classList.add('active');
+        if (playSound) {
+          this.sound.playColorTone(color, duration);
+        }
+
+        setTimeout(() => {
+          pad.classList.remove('active');
+        }, duration);
+      }
+
+      triggerEmojiAnimation(emoji, fromName = '') {
+        const el = document.createElement('div');
+        el.className = 'confetti text-2xl flex flex-col items-center select-none';
+        el.style.left = `${10 + Math.random() * 80}vw`;
+        el.style.top = '10vh';
+        el.innerHTML = `<span>${emoji}</span>${fromName ? `<span class="text-[9px] bg-black/60 px-1 rounded text-white">${fromName}</span>` : ''}`;
+        this.dom.emojiContainer.appendChild(el);
+        setTimeout(() => el.remove(), 3200);
+      }
+
+      /* ==========================================================================
+         4. P2P WEBRTC NETWORK INITIALIZATION (UNIVERSAL TRYSTERO ADAPTER)
+         ========================================================================== */
+      initNetwork() {
+        const appId = 'simon-relay-nostr-p2p';
+        
+        try {
+          this.room = joinRoom({ appId }, this.roomName);
+
+          // Helper to support both Trystero object API and array tuple API
+          const createAction = (actionName, onMessageCallback) => {
+            const act = this.room.makeAction(actionName);
+            if (act && typeof act.send === 'function') {
+              act.onMessage = (data, meta) => {
+                const peerId = (typeof meta === 'object' && meta !== null) ? meta.peerId : meta;
+                onMessageCallback(data, peerId);
+              };
+              return (data, targetPeerId) => {
+                if (targetPeerId) {
+                  act.send(data, targetPeerId);
+                } else {
+                  act.send(data);
+                }
+              };
+            } else if (Array.isArray(act)) {
+              const [send, get] = act;
+              get((data, peerId) => {
+                onMessageCallback(data, peerId);
+              });
+              return send;
+            }
+          };
+
+          this.net = {
+            sendProfile: createAction('profile', (data, peerId) => {
+              this.peers.set(peerId, {
+                name: data.name,
+                avatar: data.avatar,
+                isReady: !!data.isReady
+              });
+              this.updatePlayersListUI();
+              this.checkAllReadyToStart();
+            }),
+
+            sendReady: createAction('ready', (data, peerId) => {
+              if (this.peers.has(peerId)) {
+                this.peers.get(peerId).isReady = data.isReady;
+                this.updatePlayersListUI();
+                this.checkAllReadyToStart();
+              }
+            }),
+
+            sendGameStart: createAction('gameStart', (data) => {
+              this.onGameStartReceived(data);
+            }),
+
+            sendStepAction: createAction('stepAction', (data) => {
+              this.onStepActionReceived(data);
+            }),
+
+            sendElimination: createAction('elimination', (data) => {
+              this.onEliminationReceived(data);
+            }),
+
+            sendNextRound: createAction('nextRound', (data) => {
+              this.onNextRoundReceived(data);
+            }),
+
+            sendGameOver: createAction('gameOver', (data) => {
+              this.onGameOverReceived(data);
+            }),
+
+            sendReaction: createAction('reaction', (data, peerId) => {
+              const senderName = this.peers.get(peerId)?.name || 'Joueur';
+              this.triggerEmojiAnimation(data.emoji, senderName);
+            })
+          };
+
+          // Peer discovery callbacks
+          const handleJoin = (peerId) => {
+            console.log('Joueur connecté:', peerId);
+            this.net.sendProfile({
+              name: this.profileMgr.profile.name,
+              avatar: this.profileMgr.profile.avatar,
+              isReady: this.isReady
+            }, peerId);
+
+            this.dom.connectionStatusText.textContent = 'En ligne P2P';
+            this.dom.connectionStatusBadge.classList.replace('border-slate-700', 'border-emerald-500/30');
+            this.dom.connectionStatusBadge.querySelector('span')?.classList.replace('bg-amber-400', 'bg-emerald-400');
+            this.updatePlayersListUI();
+          };
+
+          const handleLeave = (peerId) => {
+            console.log('Joueur déconnecté:', peerId);
+            this.peers.delete(peerId);
+            this.updatePlayersListUI();
+
+            if (this.gameState === 'IN_ROUND') {
+              this.alivePlayers = this.alivePlayers.filter(id => id !== peerId);
+              this.turnCycle = this.turnCycle.filter(id => id !== peerId);
+
+              if (this.currentTurnPlayerId === peerId && this.isHost()) {
+                this.handleRemotePlayerElimination(peerId, 'Déconnexion');
+              }
+              if (this.alivePlayers.length <= 1) {
+                this.checkGameEnding();
+              }
+            }
+            this.checkAllReadyToStart();
+          };
+
+          if (typeof this.room.onPeerJoin === 'function') {
+            this.room.onPeerJoin(handleJoin);
+            this.room.onPeerLeave(handleLeave);
+          } else {
+            this.room.onPeerJoin = handleJoin;
+            this.room.onPeerLeave = handleLeave;
+          }
+
+          this.dom.connectionStatusText.textContent = 'En ligne P2P';
+          this.dom.connectionStatusBadge.querySelector('span')?.classList.remove('animate-ping');
+          this.dom.connectionStatusBadge.querySelector('span')?.classList.add('bg-emerald-400');
+
+        } catch (err) {
+          console.error('Erreur P2P Trystero:', err);
+          this.dom.connectionStatusText.textContent = 'Mode Local';
+        }
+      }
+
+      /* ==========================================================================
+         5. GAME STATE MACHINE & RELAY LOGIC (1C + ELIMINATION)
+         ========================================================================== */
+      toggleReady() {
+        this.sound.initContext();
+        this.isReady = !this.isReady;
+        
+        if (this.isReady) {
+          this.dom.readyBtn.textContent = '✅ En attente des autres...';
+          this.dom.readyBtn.classList.replace('from-emerald-500', 'from-amber-500');
+          this.dom.readyBtn.classList.replace('to-teal-600', 'to-orange-600');
+        } else {
+          this.dom.readyBtn.textContent = 'Je suis prêt !';
+          this.dom.readyBtn.classList.replace('from-amber-500', 'from-emerald-500');
+          this.dom.readyBtn.classList.replace('to-orange-600', 'to-teal-600');
+        }
+
+        this.updatePlayersListUI();
+        if (this.net) {
+          this.net.sendReady({ isReady: this.isReady });
+        }
+        this.checkAllReadyToStart();
+      }
+
+      checkAllReadyToStart() {
+        if (this.gameState !== 'LOBBY') return;
+        if (!this.isHost()) return;
+
+        const allPlayers = [
+          { id: this.myId, isReady: this.isReady },
+          ...Array.from(this.peers.entries()).map(([id, p]) => ({ id, isReady: p.isReady }))
+        ];
+
+        const allReady = allPlayers.length >= 1 && allPlayers.every(p => p.isReady);
+
+        if (allReady) {
+          this.initiateGameStart();
+        }
+      }
+
+      initiateGameStart() {
+        const allPlayerIds = [this.myId, ...Array.from(this.peers.keys())];
+        const payload = {
+          alivePlayers: allPlayerIds,
+          timestamp: Date.now()
+        };
+
+        if (this.net) {
+          this.net.sendGameStart(payload);
+        }
+        this.onGameStartReceived(payload);
+      }
+
+      onGameStartReceived(data) {
+        this.gameState = 'STARTING';
+        this.alivePlayers = [...data.alivePlayers];
+        this.sequence = [];
+        this.currentRound = 1;
+        this.currentStep = 0;
+        this.turnCycle = [];
+
+        this.dom.readyBtn.classList.add('hidden');
+        this.dom.activeTurnWidget.classList.remove('hidden');
+        this.dom.activeTurnWidget.classList.add('flex');
+        this.updatePlayersListUI();
+
+        let count = 3;
+        this.dom.statusMsg.innerHTML = `<span class="text-amber-400 font-digital font-bold text-lg">Démarrage dans ${count}...</span>`;
+        this.sound.playRoundChime();
+
+        const timer = setInterval(() => {
+          count--;
+          if (count > 0) {
+            this.dom.statusMsg.innerHTML = `<span class="text-amber-400 font-digital font-bold text-lg">Démarrage dans ${count}...</span>`;
+            this.sound.playRoundChime();
+          } else {
+            clearInterval(timer);
+            this.dom.statusMsg.innerHTML = `<span class="text-emerald-400 font-bold">C'est parti !</span>`;
+            this.gameState = 'IN_ROUND';
+            if (this.isHost()) {
+              this.startNewRound(1);
+            }
+          }
+        }, 1000);
+      }
+
+      startNewRound(roundNumber) {
+        this.currentRound = roundNumber;
+        this.currentStep = 0;
+        this.dom.scoreDisplay.textContent = this.currentRound < 10 ? `0${this.currentRound}` : this.currentRound;
+
+        const nextPlayer = this.pickNextPlayerFromCycle();
+        const isAddingNewNote = this.sequence.length === 0;
+
+        const payload = {
+          round: this.currentRound,
+          sequence: this.sequence,
+          step: 0,
+          turnPlayerId: nextPlayer,
+          isAddingNewNote: isAddingNewNote
+        };
+
+        if (this.net) {
+          this.net.sendNextRound(payload);
+        }
+        this.onNextRoundReceived(payload);
+      }
+
+      onNextRoundReceived(data) {
+        this.currentRound = data.round;
+        this.sequence = data.sequence;
+        this.currentStep = data.step;
+        this.currentTurnPlayerId = data.turnPlayerId;
+        this.dom.scoreDisplay.textContent = this.currentRound < 10 ? `0${this.currentRound}` : this.currentRound;
+        this.updatePlayersListUI();
+
+        this.promptPlayerTurn(data.turnPlayerId, data.isAddingNewNote);
+      }
+
+      pickNextPlayerFromCycle() {
+        if (this.alivePlayers.length === 0) return this.myId;
+        if (this.turnCycle.length === 0) {
+          this.turnCycle = [...this.alivePlayers].sort(() => Math.random() - 0.5);
+        }
+        return this.turnCycle.pop();
+      }
+
+      promptPlayerTurn(turnPlayerId, isAddingNewNote) {
+        const isMe = turnPlayerId === this.myId;
+        const playerInfo = turnPlayerId === this.myId 
+          ? { name: this.profileMgr.profile.name, avatar: this.profileMgr.profile.avatar }
+          : (this.peers.get(turnPlayerId) || { name: 'Joueur', avatar: '' });
+
+        this.dom.turnAvatar.src = playerInfo.avatar;
+        this.dom.turnName.textContent = playerInfo.name;
+
+        if (isMe) {
+          this.sound.playRoundChime();
+          this.setPadClickable(true);
+          if (isAddingNewNote) {
+            this.dom.turnInstruction.textContent = 'Ajoutez 1 couleur !';
+            this.dom.statusMsg.innerHTML = `<span class="text-simon-yellow font-bold animate-pulse">👉 C'est votre tour ! Choisissez la NOUVELLE couleur.</span>`;
+          } else {
+            this.dom.turnInstruction.textContent = `Note ${this.currentStep + 1}/${this.sequence.length}`;
+            this.dom.statusMsg.innerHTML = `<span class="text-emerald-400 font-bold animate-pulse">👉 C'est votre tour ! Rejouez la note ${this.currentStep + 1}.</span>`;
+          }
+        } else {
+          this.setPadClickable(false);
+          if (isAddingNewNote) {
+            this.dom.turnInstruction.textContent = 'Ajout d\'une note';
+            this.dom.statusMsg.innerHTML = `Au tour de <span class="text-amber-400 font-bold">${playerInfo.name}</span> d'ajouter une nouvelle couleur...`;
+          } else {
+            this.dom.turnInstruction.textContent = `Note ${this.currentStep + 1}/${this.sequence.length}`;
+            this.dom.statusMsg.innerHTML = `Au tour de <span class="text-amber-400 font-bold">${playerInfo.name}</span> de jouer la note ${this.currentStep + 1}...`;
+          }
+        }
+
+        this.startTurnCountdown();
+      }
+
+      startTurnCountdown() {
+        this.clearTurnCountdown();
+        this.turnDurationMs = Math.max(2500, 5000 - (this.currentRound * 100));
+        const startTime = Date.now();
+        this.turnTimerEnd = startTime + this.turnDurationMs;
+
+        this.turnTimer = setInterval(() => {
+          const remaining = Math.max(0, this.turnTimerEnd - Date.now());
+          const ratio = remaining / this.turnDurationMs;
+
+          this.dom.timerBar.style.width = `${ratio * 100}%`;
+          this.dom.timerText.textContent = `${(remaining / 1000).toFixed(1)}s`;
+
+          if (remaining <= 0) {
+            this.clearTurnCountdown();
+            if (this.currentTurnPlayerId === this.myId) {
+              this.handleLocalMistake('Temps écoulé !');
+            } else if (this.isHost()) {
+              this.handleRemotePlayerElimination(this.currentTurnPlayerId, 'Temps écoulé');
+            }
+          }
+        }, 50);
+      }
+
+      clearTurnCountdown() {
+        if (this.turnTimer) {
+          clearInterval(this.turnTimer);
+          this.turnTimer = null;
+        }
+        this.dom.timerBar.style.width = '100%';
+        this.dom.timerText.textContent = '5.0s';
+      }
+
+      onPadClick(color) {
+        if (this.gameState !== 'IN_ROUND') return;
+        if (this.currentTurnPlayerId !== this.myId) return;
+
+        this.clearTurnCountdown();
+        this.flashPad(color, 350, true);
+
+        const isAddingNewNote = this.currentStep === this.sequence.length;
+
+        if (!isAddingNewNote) {
+          const expectedColor = this.sequence[this.currentStep];
+          if (color !== expectedColor) {
+            this.handleLocalMistake(`Mauvaise couleur (attendu: ${expectedColor})`);
+            return;
+          }
+        }
+
+        const actionPayload = {
+          playerId: this.myId,
+          color: color,
+          step: this.currentStep,
+          isAddingNewNote: isAddingNewNote
+        };
+
+        if (this.net) {
+          this.net.sendStepAction(actionPayload);
+        }
+        this.onStepActionReceived(actionPayload);
+      }
+
+      onStepActionReceived(data) {
+        this.clearTurnCountdown();
+        if (data.playerId !== this.myId) {
+          this.flashPad(data.color, 350, true);
+        }
+
+        if (data.isAddingNewNote) {
+          this.sequence.push(data.color);
+          this.sound.playRoundChime();
+          this.dom.statusMsg.innerHTML = `<span class="text-emerald-400 font-bold">✨ Manche ${this.currentRound} réussie ! Préparation manche ${this.currentRound + 1}...</span>`;
+          this.setPadClickable(false);
+
+          setTimeout(() => {
+            if (this.isHost() && this.gameState === 'IN_ROUND') {
+              this.startNewRound(this.currentRound + 1);
+            }
+          }, 1500);
+
+        } else {
+          this.currentStep++;
+          const isNextStepAddition = this.currentStep === this.sequence.length;
+
+          if (this.isHost()) {
+            const nextPlayer = this.pickNextPlayerFromCycle();
+            const nextPayload = {
+              round: this.currentRound,
+              sequence: this.sequence,
+              step: this.currentStep,
+              turnPlayerId: nextPlayer,
+              isAddingNewNote: isNextStepAddition
+            };
+
+            if (this.net) {
+              this.net.sendNextRound(nextPayload);
+            }
+            this.onNextRoundReceived(nextPayload);
+          }
+        }
+      }
+
+      handleLocalMistake(reason) {
+        this.sound.playBuzzer();
+        this.setPadClickable(false);
+        this.clearTurnCountdown();
+
+        const payload = {
+          eliminatedPlayerId: this.myId,
+          reason: reason
+        };
+
+        if (this.net) {
+          this.net.sendElimination(payload);
+        }
+        this.onEliminationReceived(payload);
+      }
+
+      handleRemotePlayerElimination(peerId, reason) {
+        const payload = {
+          eliminatedPlayerId: peerId,
+          reason: reason
+        };
+        if (this.net) {
+          this.net.sendElimination(payload);
+        }
+        this.onEliminationReceived(payload);
+      }
+
+      onEliminationReceived(data) {
+        this.sound.playBuzzer();
+        const eliminatedId = data.eliminatedPlayerId;
+        const playerInfo = eliminatedId === this.myId 
+          ? { name: this.profileMgr.profile.name } 
+          : (this.peers.get(eliminatedId) || { name: 'Un joueur' });
+
+        this.alivePlayers = this.alivePlayers.filter(id => id !== eliminatedId);
+        this.turnCycle = this.turnCycle.filter(id => id !== eliminatedId);
+        this.updatePlayersListUI();
+
+        this.dom.statusMsg.innerHTML = `<span class="text-red-400 font-bold">💥 ${playerInfo.name} est éliminé (${data.reason}) !</span>`;
+
+        if (eliminatedId === this.myId) {
+          this.setPadClickable(false);
+          this.dom.turnInstruction.textContent = '💀 ÉLIMINÉ';
+        }
+
+        setTimeout(() => {
+          if (this.isHost()) {
+            this.checkGameEnding();
+          }
+        }, 1800);
+      }
+
+      checkGameEnding() {
+        const totalInitialPlayers = 1 + this.peers.size;
+
+        if (this.alivePlayers.length === 1 && totalInitialPlayers > 1) {
+          const winnerId = this.alivePlayers[0];
+          const payload = {
+            winnerId: winnerId,
+            score: this.currentRound
+          };
+          if (this.net) {
+            this.net.sendGameOver(payload);
+          }
+          this.onGameOverReceived(payload);
+
+        } else if (this.alivePlayers.length === 0 || (totalInitialPlayers === 1 && this.alivePlayers.length === 0)) {
+          const payload = {
+            winnerId: null,
+            score: this.currentRound
+          };
+          if (this.net) {
+            this.net.sendGameOver(payload);
+          }
+          this.onGameOverReceived(payload);
+
+        } else if (this.alivePlayers.length > 1) {
+          this.dom.statusMsg.innerHTML = `<span class="text-amber-400 font-bold">Reprise de la manche ${this.currentRound} avec les survivants !</span>`;
+          setTimeout(() => {
+            if (this.isHost()) {
+              this.startNewRound(this.currentRound);
+            }
+          }, 1500);
+        }
+      }
+
+      onGameOverReceived(data) {
+        this.gameState = 'GAME_OVER';
+        this.clearTurnCountdown();
+        this.setPadClickable(false);
+
+        if (data.winnerId) {
+          const winnerInfo = data.winnerId === this.myId 
+            ? { name: this.profileMgr.profile.name, isMe: true } 
+            : { name: this.peers.get(data.winnerId)?.name || 'Joueur', isMe: false };
+
+          this.sound.playVictory();
+          this.dom.statusMsg.innerHTML = `
+            <div class="flex flex-col items-center">
+              <span class="text-amber-400 font-bold text-base">👑 VICTOIRE DE ${winnerInfo.name} !</span>
+              <span class="text-xs text-slate-300">Score final : Manche ${data.score}</span>
+            </div>
+          `;
+          for (let i = 0; i < 20; i++) {
+            setTimeout(() => this.triggerEmojiAnimation('🏆', winnerInfo.name), i * 150);
+          }
+        } else {
+          this.sound.playBuzzer();
+          this.dom.statusMsg.innerHTML = `
+            <div class="flex flex-col items-center">
+              <span class="text-red-400 font-bold text-base">💀 GAME OVER</span>
+              <span class="text-xs text-slate-300">Manches atteintes : ${data.score}</span>
+            </div>
+          `;
+        }
+
+        setTimeout(() => {
+          this.resetToLobby();
+        }, 4000);
+      }
+
+      resetToLobby() {
+        this.gameState = 'LOBBY';
+        this.isReady = false;
+        this.sequence = [];
+        this.currentRound = 0;
+        this.currentStep = 0;
+        this.alivePlayers = [];
+        this.turnCycle = [];
+
+        this.dom.scoreDisplay.textContent = '--';
+        this.dom.readyBtn.textContent = 'Je suis prêt !';
+        this.dom.readyBtn.classList.replace('from-amber-500', 'from-emerald-500');
+        this.dom.readyBtn.classList.replace('to-orange-600', 'to-teal-600');
+        this.dom.readyBtn.classList.remove('hidden');
+        this.dom.activeTurnWidget.classList.add('hidden');
+        this.dom.activeTurnWidget.classList.remove('flex');
+        this.dom.statusMsg.innerHTML = `Partie terminée. Cliquez sur <span class="text-emerald-400 font-bold">Prêt</span> pour rejouer !`;
+
+        this.peers.forEach(p => p.isReady = false);
+        this.updatePlayersListUI();
+      }
+
+      /* ==========================================================================
+         6. DOM EVENT LISTENERS
+         ========================================================================== */
+      bindEvents() {
+        // Pad clicks
+        Object.entries(this.dom.pads).forEach(([color, el]) => {
+          el.addEventListener('click', () => {
+            this.sound.initContext();
+            this.onPadClick(color);
+          });
+        });
+
+        // Ready toggle
+        this.dom.readyBtn.addEventListener('click', () => {
+          this.toggleReady();
+        });
+
+        // Profile Modal
+        this.dom.openProfileBtn.addEventListener('click', () => {
+          this.updateHeaderProfile();
+          this.dom.profileModal.classList.remove('hidden');
+        });
+
+        this.dom.closeProfileBtn.addEventListener('click', () => {
+          this.profileMgr.stopWebcam();
+          this.dom.webcamContainer.classList.add('hidden');
+          this.dom.profileModal.classList.add('hidden');
+        });
+
+        // Save Profile
+        this.dom.saveProfileBtn.addEventListener('click', () => {
+          const newName = this.dom.pseudoInput.value.trim() || 'Anonyme';
+          const newAvatar = this.dom.modalAvatarPreview.src;
+
+          this.profileMgr.saveProfile(newName, newAvatar);
+          this.profileMgr.stopWebcam();
+          this.dom.webcamContainer.classList.add('hidden');
+          this.dom.profileModal.classList.add('hidden');
+
+          this.updateHeaderProfile();
+          this.updatePlayersListUI();
+
+          if (this.net) {
+            this.net.sendProfile({
+              name: this.profileMgr.profile.name,
+              avatar: this.profileMgr.profile.avatar,
+              isReady: this.isReady
+            });
+          }
+        });
+
+        // Webcam Controls
+        this.dom.startWebcamBtn.addEventListener('click', async () => {
+          this.dom.webcamContainer.classList.remove('hidden');
+          await this.profileMgr.startWebcam(this.dom.webcamVideo);
+        });
+
+        this.dom.cancelWebcamBtn.addEventListener('click', () => {
+          this.profileMgr.stopWebcam();
+          this.dom.webcamContainer.classList.add('hidden');
+        });
+
+        this.dom.snapPhotoBtn.addEventListener('click', () => {
+          const capturedBase64 = this.profileMgr.captureWebcamFrame(this.dom.webcamVideo);
+          this.dom.modalAvatarPreview.src = capturedBase64;
+          this.profileMgr.stopWebcam();
+          this.dom.webcamContainer.classList.add('hidden');
+        });
+
+        // File upload avatar fallback
+        this.dom.avatarFileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = 96;
+              canvas.height = 96;
+              const ctx = canvas.getContext('2d');
+              const minDim = Math.min(img.width, img.height);
+              ctx.drawImage(img, (img.width - minDim) / 2, (img.height - minDim) / 2, minDim, minDim, 0, 0, 96, 96);
+              this.dom.modalAvatarPreview.src = canvas.toDataURL('image/jpeg', 0.85);
+            };
+            img.src = evt.target.result;
+          };
+          reader.readAsDataURL(file);
+        });
+
+        // Sound Toggle
+        this.dom.toggleSoundBtn.addEventListener('click', () => {
+          this.sound.isMuted = !this.sound.isMuted;
+          this.dom.soundIconOn.classList.toggle('hidden', this.sound.isMuted);
+          this.dom.soundIconOff.classList.toggle('hidden', !this.sound.isMuted);
+        });
+
+        // Copy Room Link
+        this.dom.copyRoomBtn.addEventListener('click', () => {
+          const url = window.location.href;
+          navigator.clipboard.writeText(url).then(() => {
+            const orig = this.dom.copyRoomBtn.innerHTML;
+            this.dom.copyRoomBtn.innerHTML = '<span>Lien copié !</span>';
+            setTimeout(() => this.dom.copyRoomBtn.innerHTML = orig, 2000);
+          }).catch(() => {
+            prompt('Copiez ce lien pour inviter des amis :', window.location.href);
+          });
+        });
+
+        // Reaction Buttons
+        document.querySelectorAll('.reaction-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const emoji = btn.getAttribute('data-emoji');
+            this.triggerEmojiAnimation(emoji, 'Moi');
+            if (this.net) {
+              this.net.sendReaction({ emoji });
+            }
+          });
+        });
+
+        // Global keydown (1,2,3,4 for Simon pads)
+        window.addEventListener('keydown', (e) => {
+          if (['1', '2', '3', '4'].includes(e.key) && this.dom.profileModal.classList.contains('hidden')) {
+            const colorMap = { '1': 'green', '2': 'red', '3': 'yellow', '4': 'blue' };
+            this.sound.initContext();
+            this.onPadClick(colorMap[e.key]);
+          }
+        });
+      }
+    }
+
+    // Launch Application once DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+      window.simonApp = new SimonApp();
+    });
+  </script>
+</body>
+</html>
