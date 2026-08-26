@@ -769,6 +769,7 @@
         Object.values(this.dom.pads).forEach(pad => {
           pad.disabled = !clickable;
         });
+        console.info('set clickable ', clickable);
       }
 
       flashPad(color, duration = 300, playSound = true) {
@@ -1056,12 +1057,7 @@
             ];
           }
         }
-        const selectedPlayerId = this.turnCycle.pop();
-        console.debug('[Simon] Joueur choisi:', {
-          playerId: selectedPlayerId,
-          callStack: new Error().stack
-        });
-        return selectedPlayerId;
+        return this.turnCycle.pop();
       }
 
       promptPlayerTurn(turnPlayerId, isAddingNewNote) {
