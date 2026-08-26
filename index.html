@@ -615,6 +615,7 @@
         this.sequence = [];
         this.currentRound = 0;
         this.currentStep = 0;
+        this.lastPlayedStep = null;
         this.currentTurnPlayerId = null;
         this.alivePlayers = [];
         this.turnCycle = [];
@@ -1038,6 +1039,7 @@
         this.currentRound = data.round;
         this.sequence = data.sequence;
         this.currentStep = data.step;
+        this.lastPlayedStep = null;
         this.currentTurnPlayerId = data.turnPlayerId;
         this.dom.scoreDisplay.textContent = this.currentRound < 10 ? `0${this.currentRound}` : this.currentRound;
         this.updatePlayersListUI();
@@ -1132,12 +1134,13 @@
         if (this.gameState !== 'IN_ROUND') return;
         if (this.currentTurnPlayerId !== this.myId) return;
 
-        // Prevent clicking beyond the current sequence length
-        if (this.currentStep > this.sequence.length) return;
-
         // Prevent clicking if the turn timer has already expired
         const remaining = Math.max(0, this.turnTimerEnd - Date.now());
         if (remaining <= 0) return;
+
+        // Prevent a second click during the same step
+        if (this.lastPlayedStep === this.currentStep) return;
+        this.lastPlayedStep = this.currentStep;
 
         this.clearTurnCountdown();
         this.flashPad(color, 350, true);
