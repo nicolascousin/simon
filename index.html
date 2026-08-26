@@ -105,8 +105,8 @@
     }
     .confetti {
       position: absolute;
-      width: 10px;
-      height: 10px;
+      width: max-content;
+      height: max-content;
       animation: float 3s linear forwards;
     }
   </style>
@@ -786,7 +786,7 @@
         el.className = 'confetti flex flex-col items-center select-none';
         el.style.left = `${10 + Math.random() * 80}vw`;
         el.style.top = '10vh';
-        el.innerHTML = `${avatar ? `<img src="${avatar}" alt="" class="w-8 h-8 rounded-full object-cover ring-2 ring-white/70 mb-1">` : ''}<span class="text-[3rem] leading-none">${emoji}</span>${fromName ? `<span class="text-[9px] bg-black/60 px-1 rounded text-white">${fromName}</span>` : ''}`;
+        el.innerHTML = `${avatar ? `<img src="${avatar}" alt="" style="width: 48px; height: 48px;" class="rounded-full object-cover ring-2 ring-white/70 mb-1">` : ''}<span style="font-size: 3rem; line-height: 1;">${emoji}</span>${fromName ? `<span style="font-size: 0.875rem; line-height: 1.25rem;" class="bg-black/60 px-2 py-0.5 rounded text-white">${fromName}</span>` : ''}`;
         this.dom.emojiContainer.appendChild(el);
         setTimeout(() => el.remove(), 3200);
       }
