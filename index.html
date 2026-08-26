@@ -985,8 +985,8 @@
         this.turnCycle = [];
 
         this.dom.readyBtn.classList.add('hidden');
-        this.dom.activeTurnWidget.classList.remove('hidden');
-        this.dom.activeTurnWidget.classList.add('flex');
+        this.dom.activeTurnWidget.classList.add('hidden');
+        this.dom.activeTurnWidget.classList.remove('flex');
         this.updatePlayersListUI();
 
         let count = 3;
@@ -1068,6 +1068,8 @@
           ? { name: this.profileMgr.profile.name, avatar: this.profileMgr.profile.avatar }
           : (this.peers.get(turnPlayerId) || { name: 'Joueur', avatar: '' });
 
+        this.dom.activeTurnWidget.classList.remove('hidden');
+        this.dom.activeTurnWidget.classList.add('flex');
         this.dom.turnAvatar.src = playerInfo.avatar;
         this.dom.turnName.textContent = playerInfo.name;
 
