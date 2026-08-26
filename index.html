@@ -1179,12 +1179,11 @@
           const isNextStepAddition = this.currentStep === this.sequence.length;
 
           if (this.isHost()) {
-            const nextPlayer = this.pickNextPlayerFromCycle();
             const nextPayload = {
               round: this.currentRound,
               sequence: this.sequence,
               step: this.currentStep,
-              turnPlayerId: nextPlayer,
+              turnPlayerId: data.playerId,
               isAddingNewNote: isNextStepAddition
             };
 
