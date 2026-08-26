@@ -256,10 +256,12 @@
 
             <!-- IN-GAME ACTIVE TURN DISPLAY -->
             <div id="active-turn-widget" class="hidden flex-col items-center space-y-1">
-              <div class="relative">
-                <img id="turn-avatar" src="" class="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover ring-2 ring-amber-400 shadow-md">
+              <div class="flex items-center space-x-2">
+                <div class="relative">
+                  <img id="turn-avatar" src="" class="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover ring-2 ring-amber-400 shadow-md">
+                </div>
+                <span id="turn-name" class="text-xs font-bold text-slate-200 max-w-[120px] truncate">Nom</span>
               </div>
-              <span id="turn-name" class="text-xs font-bold text-slate-200 max-w-[120px] truncate">Nom</span>
               <span id="turn-instruction" class="text-[10px] text-amber-300 font-semibold uppercase tracking-wider">Votre tour</span>
             </div>
           </div>
