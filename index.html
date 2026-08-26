@@ -1107,6 +1107,7 @@
           this.dom.timerText.textContent = `${(remaining / 1000).toFixed(1)}s`;
 
           if (remaining <= 0) {
+            this.setPadClickable(false);
             this.clearTurnCountdown();
             if (this.currentTurnPlayerId === this.myId) {
               this.handleLocalMistake('Temps écoulé !');
@@ -1130,10 +1131,13 @@
         if (this.gameState !== 'IN_ROUND') return;
         if (this.currentTurnPlayerId !== this.myId) return;
 
+        const isAddingNewNote = this.currentStep === this.sequence.length;
+        if (isAddingNewNote) {
+          this.setPadClickable(false);
+        }
+
         this.clearTurnCountdown();
         this.flashPad(color, 350, true);
-
-        const isAddingNewNote = this.currentStep === this.sequence.length;
 
         if (!isAddingNewNote) {
           const expectedColor = this.sequence[this.currentStep];
