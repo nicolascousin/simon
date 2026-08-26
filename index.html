@@ -289,7 +289,13 @@
           <span>Son</span>
         </button>
 
-        <span class="text-xs text-slate-500">Code salle : <span id="room-code-tag" class="font-digital text-slate-300 font-bold">global</span></span>
+        <div class="flex flex-col items-start gap-1">
+          <span class="text-xs text-slate-500">Code salle : <span id="room-code-tag" class="font-digital text-slate-300 font-bold">global</span></span>
+          <button id="change-room-btn" title="Changer de salle" class="text-[11px] text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1 font-semibold">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18m-6-6l6 6-6 6"></path></svg>
+            <span>Changer de salle</span>
+          </button>
+        </div>
       </div>
 
     </section>
@@ -663,6 +669,7 @@
           openProfileBtn: document.getElementById('open-profile-btn'),
           closeProfileBtn: document.getElementById('close-profile-btn'),
           copyRoomBtn: document.getElementById('copy-room-btn'),
+          changeRoomBtn: document.getElementById('change-room-btn'),
           toggleSoundBtn: document.getElementById('toggle-sound-btn'),
           soundIconOn: document.getElementById('sound-icon-on'),
           soundIconOff: document.getElementById('sound-icon-off'),
@@ -675,7 +682,7 @@
       }
 
       getRoomNameFromURL() {
-        const hash = window.location.hash.replace('#', '').trim();
+        const hash = decodeURIComponent(window.location.hash.replace('#', '').trim());
         return hash || 'simon-global-lobby';
       }
 
@@ -1467,6 +1474,17 @@
           }).catch(() => {
             prompt('Copiez ce lien pour inviter des amis :', window.location.href);
           });
+        });
+
+        // Change room
+        this.dom.changeRoomBtn.addEventListener('click', () => {
+          const newRoomName = prompt('Entrez le nom de la nouvelle salle :', this.roomName);
+          if (!newRoomName || !newRoomName.trim()) return;
+
+          const roomName = newRoomName.trim().slice(0, 40);
+          if (roomName === this.roomName) return;
+          window.location.hash = encodeURIComponent(roomName);
+          window.location.reload();
         });
 
         // Reaction Buttons
