@@ -1028,7 +1028,7 @@
         this.dom.scoreDisplay.textContent = this.currentRound < 10 ? `0${this.currentRound}` : this.currentRound;
 
         const nextPlayer = this.pickNextPlayerFromCycle();
-        const isAddingNewNote = this.sequence.length === 0 && !this.victoryTurnPending;
+        const isAddingNewNote = this.sequence.length === 0;
 
         const payload = {
           round: this.currentRound,
@@ -1087,8 +1087,8 @@
         if (isMe && this.victoryTurnPending) {
           this.sound.playRoundChime();
           this.setPadClickable(true);
-          this.dom.turnInstruction.textContent = `Note ${this.currentStep + 1}/${this.sequence.length}`;
-          this.dom.statusMsg.innerHTML = `<span class="text-amber-400 font-bold animate-pulse">🏆 Tour pour la victoire ! Note ${this.currentStep + 1}/${this.sequence.length}.</span>`;
+          this.dom.turnInstruction.textContent = 'Tour pour la victoire';
+          this.dom.statusMsg.innerHTML = `<span class="text-amber-400 font-bold animate-pulse">🏆 Tour pour la victoire ! Réussissez cette séquence pour gagner.</span>`;
         } else if (isMe) {
           this.sound.playRoundChime();
           this.setPadClickable(true);
@@ -1101,8 +1101,8 @@
           }
         } else if (this.victoryTurnPending) {
           this.setPadClickable(false);
-          this.dom.turnInstruction.textContent = `Note ${this.currentStep + 1}/${this.sequence.length}`;
-          this.dom.statusMsg.innerHTML = `Tour pour la victoire de <span class="text-amber-400 font-bold">${playerInfo.name}</span> : note ${this.currentStep + 1}/${this.sequence.length}.`;
+          this.dom.turnInstruction.textContent = 'Tour pour la victoire';
+          this.dom.statusMsg.innerHTML = `Au tour de <span class="text-amber-400 font-bold">${playerInfo.name}</span> pour la victoire !`;
         } else {
           this.setPadClickable(false);
           if (isAddingNewNote) {
@@ -1193,29 +1193,24 @@
           this.flashPad(data.color, 350, true);
         }
 
-        const isVictorySequenceComplete = this.victoryTurnPending && this.currentStep + 1 === this.sequence.length;
-
-        if (isVictorySequenceComplete) {
-          this.sound.playRoundChime();
-          this.setPadClickable(false);
-
-          if (this.isHost()) {
-            const payload = {
-              winnerId: data.playerId,
-              score: this.currentRound
-            };
-            if (this.net) {
-              this.net.sendGameOver(payload);
-            }
-            this.onGameOverReceived(payload);
-          }
-          return;
-        }
-
         if (data.isAddingNewNote) {
           this.sequence.push(data.color);
           this.sound.playRoundChime();
           this.setPadClickable(false);
+
+          if (this.victoryTurnPending) {
+            if (this.isHost()) {
+              const payload = {
+                winnerId: data.playerId,
+                score: this.currentRound
+              };
+              if (this.net) {
+                this.net.sendGameOver(payload);
+              }
+              this.onGameOverReceived(payload);
+            }
+            return;
+          }
 
           this.dom.statusMsg.innerHTML = `<span class="text-emerald-400 font-bold">✨ Manche ${this.currentRound} réussie ! Préparation manche ${this.currentRound + 1}...</span>`;
 
