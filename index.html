@@ -614,6 +614,7 @@
         this.room = null;
         this.roomName = this.getRoomNameFromURL();
         this.peers = new Map();
+        this.peerProfileVersion = new Map();
         this.isReady = false;
         
         // Game State
@@ -623,6 +624,7 @@
         this.currentStep = 0;
         this.lastPlayedStep = null;
         this.currentTurnPlayerId = null;
+        this.currentTurnToken = 0;
         this.alivePlayers = [];
         this.turnCycle = [];
         this.turnTimer = null;
@@ -694,6 +696,13 @@
       getHostId() {
         const allIds = [this.myId, ...Array.from(this.peers.keys())].sort();
         return allIds[0];
+      }
+
+      getNextProfileVersion(peerId) {
+        const current = this.peerProfileVersion.get(peerId) || 0;
+        const next = current + 1;
+        this.peerProfileVersion.set(peerId, next);
+        return next;
       }
 
       /* ==========================================================================
@@ -839,11 +848,19 @@
 
           this.net = {
             sendProfile: createAction('profile', (data, peerId) => {
+              const profileVersion = Number(data.profileVersion || 0);
+              const currentVersion = this.peerProfileVersion.get(peerId) || 0;
+              if (profileVersion < currentVersion) {
+                return;
+              }
+
               this.peers.set(peerId, {
                 name: data.name,
                 avatar: data.avatar,
-                isReady: !!data.isReady
+                isReady: !!data.isReady,
+                profileVersion: profileVersion
               });
+              this.peerProfileVersion.set(peerId, profileVersion);
               this.updatePlayersListUI();
               this.checkAllReadyToStart();
             }),
@@ -888,7 +905,8 @@
             this.net.sendProfile({
               name: this.profileMgr.profile.name,
               avatar: this.profileMgr.profile.avatar,
-              isReady: this.isReady
+              isReady: this.isReady,
+              profileVersion: this.getNextProfileVersion(peerId)
             }, peerId);
 
             this.dom.connectionStatusText.textContent = 'En ligne P2P';
@@ -993,6 +1011,7 @@
         this.sequence = [];
         this.currentRound = 1;
         this.currentStep = 0;
+        this.currentTurnToken = 0;
         this.turnCycle = [];
 
         this.dom.readyBtn.classList.add('hidden');
@@ -1027,14 +1046,18 @@
 
         const nextPlayer = this.pickNextPlayerFromCycle();
         const isAddingNewNote = this.sequence.length === 0;
+        const nextTurnToken = this.currentTurnToken + 1;
 
         const payload = {
           round: this.currentRound,
           sequence: this.sequence,
           step: 0,
           turnPlayerId: nextPlayer,
+          turnToken: nextTurnToken,
           isAddingNewNote: isAddingNewNote
         };
+
+        this.currentTurnToken = nextTurnToken;
 
         if (this.net) {
           this.net.sendNextRound(payload);
@@ -1043,11 +1066,16 @@
       }
 
       onNextRoundReceived(data) {
+        if (data.turnToken !== undefined && data.turnToken < this.currentTurnToken) {
+          return;
+        }
+
         this.currentRound = data.round;
         this.sequence = data.sequence;
         this.currentStep = data.step;
         this.lastPlayedStep = null;
         this.currentTurnPlayerId = data.turnPlayerId;
+        this.currentTurnToken = data.turnToken ?? this.currentTurnToken;
         this.dom.scoreDisplay.textContent = this.currentRound < 10 ? `0${this.currentRound}` : this.currentRound;
         this.updatePlayersListUI();
 
@@ -1165,6 +1193,7 @@
           playerId: this.myId,
           color: color,
           step: this.currentStep,
+          turnToken: this.currentTurnToken,
           isAddingNewNote: isAddingNewNote
         };
 
@@ -1175,6 +1204,10 @@
       }
 
       onStepActionReceived(data) {
+        if (data.turnToken !== undefined && data.turnToken !== this.currentTurnToken) {
+          return;
+        }
+
         this.clearTurnCountdown();
         if (data.playerId !== this.myId) {
           this.flashPad(data.color, 350, true);
@@ -1202,8 +1235,11 @@
               sequence: this.sequence,
               step: this.currentStep,
               turnPlayerId: data.playerId,
+              turnToken: this.currentTurnToken + 1,
               isAddingNewNote: isNextStepAddition
             };
+
+            this.currentTurnToken = nextPayload.turnToken;
 
             if (this.net) {
               this.net.sendNextRound(nextPayload);
@@ -1343,6 +1379,7 @@
         this.sequence = [];
         this.currentRound = 0;
         this.currentStep = 0;
+        this.currentTurnToken = 0;
         this.alivePlayers = [];
         this.turnCycle = [];
 
@@ -1412,7 +1449,8 @@
             this.net.sendProfile({
               name: this.profileMgr.profile.name,
               avatar: this.profileMgr.profile.avatar,
-              isReady: this.isReady
+              isReady: this.isReady,
+              profileVersion: this.getNextProfileVersion(this.myId)
             });
           }
         });
